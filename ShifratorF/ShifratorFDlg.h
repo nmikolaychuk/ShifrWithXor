@@ -5,6 +5,7 @@
 #pragma once
 #include "afxwin.h"
 
+using namespace std;
 
 // диалоговое окно CShifratorFDlg
 class CShifratorFDlg : public CDialogEx
@@ -30,7 +31,7 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 public:
-	CString edit_text;
+//	CString edit_text;
 	afx_msg void OnBnClickedStartProcess();
 	CString edit_shifr_text;
 	CString edit_key;
@@ -41,4 +42,8 @@ public:
 	CButton m_radio_unshifr;
 	CButton m_radio_standart_text_load_upload;
 	CButton m_radio_shifr_text_load_upload;
+	CButton m_radio_des;
+	CButton m_radio_xor;
+	CString edit_text;
+	CButton m_shifr;
 };
