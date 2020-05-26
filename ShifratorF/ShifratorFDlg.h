@@ -46,4 +46,9 @@ public:
 	CButton m_radio_xor;
 	CString edit_text;
 	CButton m_shifr;
+	CButton m_radio_rsa;
+	long long open_key;
+	long long close_key;
+
+	long long n_glob;
 };

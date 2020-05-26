@@ -11,6 +11,11 @@
 #include <fstream>
 #include <bitset>
 #include <math.h>
+#include <random>
+#include <iostream>
+#include <conio.h>
+#include <cassert>
+#include <sstream>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -276,6 +281,8 @@ CShifratorFDlg::CShifratorFDlg(CWnd* pParent /*=NULL*/)
 	, edit_shifr_text(_T("Хотя он ни слова не сказал углекопам о том, что ему запрещено выступать с проповедями, никто и не просил его об этом; видимо, теперь они не нуждались в проповедях. Винсент редко разговаривал с ними. Он теперь вообще редко разговаривал с людьми. Разве что скажет при встрече «добрый день», вот и все. Он не заходил больше в хижины углекопов и не интересовался их жизнью. Рабочие, о чем-то безотчетно догадываясь, по молчаливому уговору даже не упоминали его имени. Они видели, что он чуждается их, но никогда не осуждали его за это. В душе они понимали, что с ним творится."))
 	, edit_key(_T(""))
 	, edit_text(_T(""))
+	, open_key(0)
+	, close_key(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -294,6 +301,9 @@ void CShifratorFDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_RADIO_XOR, m_radio_xor);
 	DDX_Text(pDX, IDC_EDIT_SHIFR, edit_text);
 	DDX_Control(pDX, IDC_BUTTON_GENERATE_KEY, m_shifr);
+	DDX_Control(pDX, IDC_RADIO_RSA, m_radio_rsa);
+	DDX_Text(pDX, IDC_EDIT_KEY_RSA_OPEN, open_key);
+	DDX_Text(pDX, IDC_EDIT_KEY_RSA_CLOSE, close_key);
 }
 
 BEGIN_MESSAGE_MAP(CShifratorFDlg, CDialogEx)
@@ -318,6 +328,8 @@ BOOL CShifratorFDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Мелкий значок
 
 	// TODO: добавьте дополнительную инициализацию
+
+	srand(time(NULL));
 
 	return TRUE;  // возврат значения TRUE, если фокус не передан элементу управления
 }
@@ -356,6 +368,89 @@ void CShifratorFDlg::OnPaint()
 HCURSOR CShifratorFDlg::OnQueryDragIcon()
 {
 	return static_cast<HCURSOR>(m_hIcon);
+}
+
+struct PRNG
+{
+	std::mt19937 engine;
+};
+
+void initGenerator(PRNG& generator)
+{
+	// Создаём псевдо-устройство для получения случайного зерна.
+	std::random_device device;
+	// Получаем случайное зерно последовательности
+	generator.engine.seed(device());
+}
+
+// Генерирует целое число в диапазоне [minValue, maxValue)
+unsigned random(PRNG& generator, unsigned minValue, unsigned maxValue)
+{
+	// Проверяем корректность аргументов
+	assert(minValue < maxValue);
+
+	// Создаём распределение
+	std::uniform_int_distribution<unsigned> distribution(minValue, maxValue);
+
+	// Вычисляем псевдослучайное число: вызовем распределение как функцию,
+	//  передав генератор произвольных целых чисел как аргумент.
+	return distribution(generator.engine);
+}
+
+//нахождение НОД алгоритмом Евклида
+long long gcd(long long a, long long b) {
+	if (b == 0)
+		return a;
+	return gcd(b, a % b);
+}
+
+void gcdext(long long a, long long b, long long* d, long long* x, long long* y)
+{
+	long long s;
+	if (b == 0)
+	{
+		*d = a; *x = 1; *y = 0;
+		return;
+	}
+	gcdext(b, a % b, d, x, y);
+	s = *y;
+	*y = *x - (a / b) * (*y);
+	*x = s;
+}
+
+//быстрое возведение в степень по модулю
+long long mul(long long a, long long b, long long m) {
+	if (b == 1)
+		return a;
+	if (b % 2 == 0) {
+		long long t = mul(a, b / 2, m);
+		return (2 * t) % m;
+	}
+	return (mul(a, b - 1, m) + a) % m;
+}
+
+long long pows(long long a, long long b, long long m) {
+	if (b == 0)
+		return 1;
+	if (b % 2 == 0) {
+		long long t = pows(a, b / 2, m);
+		return mul(t, t, m) % m;
+	}
+	return (mul(pows(a, b - 1, m), a, m)) % m;
+}
+
+//тест ферма
+bool ferma(long long x) {
+	if (x == 2)
+		return true;
+	for (int i = 0; i < 100; i++) {
+		long long a = (rand() % (x - 2)) + 2;
+		if (gcd(a, x) != 1)
+			return false;
+		if (pows(a, x - 1, x) != 1)
+			return false;
+	}
+	return true;
 }
 
 std::string shifr_text_xor = "";
@@ -795,7 +890,7 @@ void CShifratorFDlg::OnBnClickedStartProcess()
 			out.close();
 		}
 
-		if (m_radio_unshifr.GetCheck() == BST_CHECKED)			//расшифрование не работает
+		if (m_radio_unshifr.GetCheck() == BST_CHECKED)			//расшифрование работает
 		{
 			UpdateData(TRUE);
 			if (edit_key.GetLength() == NULL) MessageBox(L"Ошибка! Введите или сгенерируйте ключ!", L"ERROR", MB_OK | MB_ICONERROR);
@@ -1116,27 +1211,252 @@ void CShifratorFDlg::OnBnClickedStartProcess()
 			out.close();
 		}
 	}
+
+	if (m_radio_rsa.GetCheck() == BST_CHECKED)
+	{
+		if (m_radio_shifr.GetCheck() == BST_CHECKED)
+		{
+			UpdateData(TRUE);
+			if (open_key == 0) MessageBox(L"Ошибка! Введите или сгенерируйте ключ!", L"ERROR", MB_OK | MB_ICONERROR);
+
+			CString Text = edit_shifr_text;
+			long long e = open_key;
+			long long n = n_glob;
+
+			std::string data;
+			data.resize(Text.GetLength());
+			WideCharToMultiByte(CP_ACP, 0, Text, -1, &data[0], data.size(), NULL, NULL);
+
+			std::string HexData = "";
+			for (unsigned char c : data)
+			{
+				long long decimalValue = (int)c;
+				long long CodeValue = pows(decimalValue, e, n);
+
+				ostringstream stream;
+				stream << CodeValue;
+				HexData += stream.str() + " ";
+			}
+
+			edit_text = HexData.c_str();
+			UpdateData(FALSE);
+		}
+
+		if (m_radio_unshifr.GetCheck() == BST_CHECKED)
+		{
+			UpdateData(TRUE);
+			if (open_key == 0) MessageBox(L"Ошибка! Введите или сгенерируйте ключ!", L"ERROR", MB_OK | MB_ICONERROR);
+
+			CString Text = edit_text;
+
+			long long d = 0;
+			d =	close_key;
+			long long n = 0;
+			n = n_glob;
+
+			std::string data;
+			data.resize(Text.GetLength());
+			WideCharToMultiByte(CP_ACP, 0, Text, -1, &data[0], data.size(), NULL, NULL);
+
+			string unshift_data = "";
+
+			//vector<string> arr;
+			//string delim(" ");
+			//size_t prev = 0;
+			//size_t next;
+			//size_t delta = delim.length();
+
+			//while ((next = data.find(delim, prev)) != string::npos) {
+			//	//Отладка-start
+			//	string tmp = data.substr(prev, next - prev);
+			//	//Отладка-end
+			//	arr.push_back(data.substr(prev, next - prev));
+			//	prev = next + delta;
+			//}
+			////Отладка-start
+			//string tmp = data.substr(prev);
+			////Отладка-end
+			//arr.push_back(data.substr(prev));
+
+			/*for (int i = 0; i < arr.size(); i++)
+			{
+				long long block = atoi(arr[i].c_str());
+				long long CodeValue = pows(block, d, n);
+
+				unshift_data += (char)CodeValue;
+			}*/
+
+			int i = 0;
+			int j = 0;
+			vector<string> arr;
+			string sym;
+			for (; i < data.length();)
+			{
+				sym = "";
+				stringstream str;
+				while (data[i] != ' ')
+				{
+					str << data[i];
+					i++;
+				}
+				i++;
+				str >> sym;
+
+				long long Num = atoi(sym.c_str());
+				long long CodeValue = pows(Num, d, n);
+				unshift_data += (char)CodeValue;
+			}
+
+			edit_shifr_text = unshift_data.c_str();
+			UpdateData(FALSE);
+		}
+	}
 }
+
 
 void CShifratorFDlg::OnBnClickedButtonGenerateKey()
 {
 	// TODO: добавьте свой код обработчика уведомлений
 	UpdateData(TRUE);
 
-	int lPass = 8;
-	char* key = new char[lPass];
-	CString eKey;
-	int t, count_ch = 26;
-
-	srand(time(0));
-	for (int i = 0; i < lPass; i++)
+	if (m_radio_xor.GetCheck() == BST_CHECKED || m_radio_des.GetCheck() == BST_CHECKED)
 	{
-		key[i] = (t = rand() % (count_ch * 2)) >= count_ch ? 'a' + t % count_ch : 'A' + t;
-		eKey += key[i];
+		open_key = 0;
+		close_key = 0;
+
+		int lPass = 8;
+		char* key = new char[lPass];
+		CString eKey;
+		int t, count_ch = 26;
+
+		srand(time(0));
+		for (int i = 0; i < lPass; i++)
+		{
+			key[i] = (t = rand() % (count_ch * 2)) >= count_ch ? 'a' + t % count_ch : 'A' + t;
+			eKey += key[i];
+		}
+
+		edit_key = eKey;
+		UpdateData(FALSE);
 	}
 
-	edit_key = eKey;
-	UpdateData(FALSE);
+	if (m_radio_rsa.GetCheck() == BST_CHECKED)
+	{
+		// 1. генерация простых чисел
+
+		edit_key = "";
+
+		unsigned int minValue = 256;
+		unsigned int maxValue = 65536;
+		int count_p = 0;
+		int iter_p = 0;
+
+		long long d;
+		long long e;
+		long long n;
+
+		do
+		{
+			e = 0;
+			d = 0;
+			n = 0;
+
+			unsigned int p = 0;
+			while (p == 0)
+			{
+				unsigned int P = rand() % (maxValue - minValue) + minValue;
+				if (ferma(P) == true)
+				{
+					p = 0;
+					p = P;
+					count_p++;
+				}
+				else
+				{
+					count_p = 0;
+				}
+				iter_p++;
+			}
+
+			int count_q = 0;
+			int iter_q = 0;
+
+			unsigned int delta = 0;
+
+			unsigned int q = 0;
+			while (q == 0)
+			{
+				delta = 0;
+				unsigned int Q = rand() % (maxValue - minValue) + minValue;
+				if (p > Q)
+				{
+					delta = p - Q;
+				}
+				else
+				{
+					delta = Q - p;
+				}
+
+				if (ferma(Q) == true && Q != p && delta < 5000)
+				{
+					count_q++;
+					q = Q;
+				}
+				else
+				{
+					count_q = 0;
+				}
+				iter_q++;
+			}
+
+			// 2. Вычисляем модуль системы n
+
+			n = (long long)p * q;
+
+			// 3. Вычисляем значение функции Эйлера от модуля системы
+
+			long long fi = 0;
+			fi = (long long)(p - 1) * (q - 1);
+
+			// 4. Выбираем случайное целое число e < fi(n), удовлетворяющее условию gcd(e, fi(n)) = 1
+
+			int count_e = 0;
+
+			e = rand() % (fi - 0) + 0;
+			while (gcd(e, fi) != 1)
+			{
+				e = rand() % (fi - 0) + 0;
+				count_e++;
+			}
+
+			// 5. Вычисляем целое число d такое, что ed = 1(mod fi(n))
+
+			long long alpha = 0;
+			long long beta = 0;
+			long long gcd = 0;
+			gcdext(e, fi, &gcd, &alpha, &beta);
+			d = alpha;
+
+			ofstream out("Простые числа.txt");
+			out << "Простое число P: " << p;
+			out << "\nПростое число Q: " << q;
+			out << "\n\nМодуль системы n: " << n;
+			out << "\n\nЗначение функции Эйлера от модуля системы: " << fi;
+			out << "\n\nВыбранное случайное целое число e < fi(n), удовлетворяющее условию gcd(e,fi(n))=1: " << e;
+			out << "\n\nНОД по модулю фи: " << gcd % fi;
+			out << "\nКоличество итераций для поиска: " << count_e;
+			out << "\n\nВычисленное число d: " << d;
+			out.close();
+		} while (d < 0);
+		// 6. (n, e) используются для открытого ключа, d - для закрытого
+
+		open_key = e;
+		close_key = d;
+		n_glob = 0;
+		n_glob = n;
+
+		UpdateData(FALSE);
+	}
 }
 
 
@@ -1219,4 +1539,3 @@ void CShifratorFDlg::OnBnClickedButtonUpload()
 	}
 	//UpdateData(FALSE);
 }
-
